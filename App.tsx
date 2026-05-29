@@ -359,6 +359,7 @@ export default function App() {
   const [stories, setStories] = useState<Story[]>(seedStories);
   const [storyLayoutMode, setStoryLayoutMode] = useState<'date' | 'mix' | 'feed'>('date');
   const [showComposer, setShowComposer] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [feedName, setFeedName] = useState('');
   const [feedUrl, setFeedUrl] = useState('');
   const [error, setError] = useState('');
@@ -563,6 +564,7 @@ export default function App() {
 
   async function logoutAccount() {
     await clearAccountSession();
+    setShowLoginModal(true);
   }
 
   useEffect(() => {
@@ -779,13 +781,15 @@ export default function App() {
 
         try {
           const remoteFeeds = await loadFeedsFromAccount(rawToken);
-          const mergedFeeds = mergeFeeds(remoteFeeds, cachedFeeds);
+          // IMPORTANT: Garder les feeds locaux en priorité pour éviter la perte de données
+          const mergedFeeds = mergeFeeds(cachedFeeds, remoteFeeds);
 
           setFeeds(mergedFeeds);
           await AsyncStorage.setItem(FEEDS_STORAGE_KEY, JSON.stringify(mergedFeeds));
           void refreshStories(mergedFeeds, { background: true });
 
-          if (mergedFeeds.length !== remoteFeeds.length) {
+          // Synchroniser les feeds locaux vers le compte
+          if (mergedFeeds.length > 0) {
             await pushFeedsToAccount(mergedFeeds, rawToken);
           }
 
@@ -797,12 +801,21 @@ export default function App() {
           void refreshStories(cachedFeeds, { background: true });
         }
       } else {
+        // Pas de token → afficher la modal de login
+        setShowLoginModal(true);
         void refreshStories(cachedFeeds, { background: true });
       }
     }
 
     void loadFeeds();
   }, []);
+
+  // Fermer le modal de login quand la connexion réussit
+  useEffect(() => {
+    if (showLoginModal && accountToken && accountMode === 'signed-in') {
+      setShowLoginModal(false);
+    }
+  }, [accountToken, accountMode, showLoginModal]);
 
   const previewStories = useMemo(() => {
     const dynamic = feeds.map((feed, index) => makeStoryFromFeed(feed, index));
@@ -1311,7 +1324,67 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+    <>
+      {/* Modal de login au démarrage */}
+      {showLoginModal && (
+        <View style={styles.loginModal}>
+          <View style={styles.loginModalContent}>
+            <Text style={styles.loginModalTitle}>BRUT MAG</Text>
+            <Text style={styles.loginModalSubtitle}>Connectez-vous pour synchroniser vos flux</Text>
+
+            <TextInput
+              value={accountEmail}
+              onChangeText={setAccountEmail}
+              placeholder="email@exemple.com"
+              placeholderTextColor="#666"
+              style={styles.loginInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+            />
+
+            <TextInput
+              value={accountPassword}
+              onChangeText={setAccountPassword}
+              placeholder="Mot de passe"
+              placeholderTextColor="#666"
+              style={styles.loginInput}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            {!!accountMessage && <Text style={styles.loginMessage}>{accountMessage}</Text>}
+
+            <View style={styles.loginActions}>
+              <Pressable
+                onPress={() => void submitAccount('login')}
+                style={styles.loginButton}
+                disabled={accountBusy}
+              >
+                <Text style={styles.loginButtonLabel}>SE CONNECTER</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => void submitAccount('register')}
+                style={styles.loginButton}
+                disabled={accountBusy}
+              >
+                <Text style={styles.loginButtonLabel}>CRÉER UN COMPTE</Text>
+              </Pressable>
+            </View>
+
+            <Pressable
+              onPress={() => setShowLoginModal(false)}
+              style={styles.loginSkipButton}
+            >
+              <Text style={styles.loginSkipText}>CONTINUER SANS COMPTE</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       <View style={styles.header}>
@@ -1721,6 +1794,7 @@ export default function App() {
         )}
       </ScrollView>
     </SafeAreaView>
+    </>
   );
 }
 
@@ -1728,6 +1802,88 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  loginModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    zIndex: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loginModalContent: {
+    backgroundColor: '#111',
+    padding: 32,
+    borderWidth: 1,
+    borderColor: '#333',
+    width: '90%',
+    maxWidth: 400,
+  },
+  loginModalTitle: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  loginModalSubtitle: {
+    color: '#999',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  loginInput: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#0a0a0a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    marginBottom: 12,
+  },
+  loginMessage: {
+    color: '#bbb',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  loginActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  loginButton: {
+    flex: 1,
+    paddingVertical: 14,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  loginButtonLabel: {
+    color: '#000',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  loginSkipButton: {
+    marginTop: 16,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  loginSkipText: {
+    color: '#666',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   header: {
     width: '100%',
