@@ -666,6 +666,33 @@ function mergeFeeds(primary: Feed[], secondary: Feed[]) {
   return dedupeFeeds([...primary, ...secondary]);
 }
 
+function isNewStory(publishedAt?: string): boolean {
+  if (!publishedAt) return false;
+  const published = new Date(publishedAt).getTime();
+  const now = Date.now();
+  const dayInMs = 24 * 60 * 60 * 1000;
+  return now - published < dayInMs;
+}
+
+function formatRelativeDate(publishedAt?: string): string {
+  if (!publishedAt) return '';
+  
+  const published = new Date(publishedAt).getTime();
+  const now = Date.now();
+  const diffMs = now - published;
+  const diffMins = Math.floor(diffMs / (60 * 1000));
+  const diffHours = Math.floor(diffMs / (60 * 60 * 1000));
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  
+  if (diffMins < 1) return 'À l\'instant';
+  if (diffMins < 60) return `Il y a ${diffMins}min`;
+  if (diffHours < 24) return `Il y a ${diffHours}h`;
+  if (diffDays === 1) return 'Hier';
+  if (diffDays < 7) return `Il y a ${diffDays}j`;
+  if (diffDays < 30) return `Il y a ${Math.floor(diffDays / 7)}sem`;
+  return `Il y a ${Math.floor(diffDays / 30)}mois`;
+}
+
 export default function App() {
   const { width, height } = useWindowDimensions();
   const [feeds, setFeeds] = useState<Feed[]>([]);
@@ -698,7 +725,23 @@ export default function App() {
   const [detailHeroLoadedKey, setDetailHeroLoadedKey] = useState('');
   const [debugHeroMode, setDebugHeroMode] = useState(false);
   const [forcedHeroUrl, setForcedHeroUrl] = useState('');
+  const [displayLimit, setDisplayLimit] = useState(12);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [readArticles, setReadArticles] = useState<Set<string>>(new Set());
+  const [favoriteArticles, setFavoriteArticles] = useState<Set<string>>(new Set());
+  const [filterSource, setFilterSource] = useState<string>('all');
+  const [showReaderMode, setShowReaderMode] = useState(false);
   const pulse = useRef(new Animated.Value(0)).current;
+
+  // Couleurs dynamiques basées sur le thème
+  const theme = {
+    bg: isDarkMode ? '#000' : '#f5f5f5',
+    text: isDarkMode ? '#fff' : '#1a1a1a',
+    textSecondary: isDarkMode ? '#9d9d9d' : '#666',
+    border: isDarkMode ? '#232323' : '#ddd',
+    cardBg: isDarkMode ? '#111' : '#fff',
+  };
 
   async function apiRequest(path: string, options: RequestInit = {}) {
     const response = await fetch(`${SYNC_API_BASE_URL}${path}`, {
@@ -1098,17 +1141,33 @@ export default function App() {
   }, [feeds]);
 
   const visibleStories = useMemo(() => {
-    const baseStories = stories.length > 0 ? stories : previewStories;
+    let baseStories = stories.length > 0 ? stories : previewStories;
+    
+    // Filtrage par recherche
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      baseStories = baseStories.filter((story) => 
+        story.title.toLowerCase().includes(query) || 
+        (story.summary || '').toLowerCase().includes(query) ||
+        story.source.toLowerCase().includes(query)
+      );
+    }
+    
+    // Filtrage par source
+    if (filterSource !== 'all') {
+      baseStories = baseStories.filter((story) => story.source === filterSource);
+    }
+    
+    // Tri selon le mode
     if (storyLayoutMode === 'mix') {
-      return mixStoriesByFeed(baseStories);
+      baseStories = mixStoriesByFeed(baseStories);
+    } else if (storyLayoutMode === 'feed') {
+      baseStories = sortStoriesByFeed(baseStories);
     }
-
-    if (storyLayoutMode === 'feed') {
-      return sortStoriesByFeed(baseStories);
-    }
-
-    return baseStories;
-  }, [stories, previewStories, storyLayoutMode]);
+    
+    // Limitation pour lazy loading
+    return baseStories.slice(0, displayLimit);
+  }, [stories, previewStories, storyLayoutMode, searchQuery, filterSource, displayLimit]);
   const masonryColumnCount = getMasonryColumnCount(width);
   const minCardHeight = Math.max(220, Math.round(height * 0.65));
   const detailHeroHeight = Math.round(height * 0.95);
@@ -1583,8 +1642,8 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       <View style={styles.header}>
         <View>
@@ -1593,6 +1652,13 @@ export default function App() {
         </View>
 
         <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => setIsDarkMode(prev => !prev)}
+            style={styles.addButton}
+          >
+            <Text style={styles.addButtonLabel}>{isDarkMode ? '☀️ CLAIR' : '🌙 SOMBRE'}</Text>
+          </Pressable>
+          
           <Pressable
             onPress={() => {
               setShowComposer((prev) => !prev);
@@ -1655,6 +1721,22 @@ export default function App() {
             <Text style={styles.layoutButtonLabel}>PAR FLUX</Text>
           </Pressable>
         </View>
+      </View>
+
+      {/* Barre de recherche */}
+      <View style={styles.searchBar}>
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Rechercher un article..."
+          placeholderTextColor="#666"
+          style={styles.searchInput}
+        />
+        {searchQuery.length > 0 && (
+          <Pressable onPress={() => setSearchQuery('')} style={styles.searchClearButton}>
+            <Text style={styles.searchClearText}>✕</Text>
+          </Pressable>
+        )}
       </View>
 
       {showComposer && (
@@ -1910,6 +1992,11 @@ export default function App() {
                       end={{ x: 0.5, y: 0 }}
                       style={[styles.imageTint, styles.noPointerEvents]}
                     />
+                    {isNewStory(item.story.publishedAt) && (
+                      <View style={styles.newBadge}>
+                        <Text style={styles.newBadgeText}>NOUVEAU</Text>
+                      </View>
+                    )}
                     {!!item.story.videoUrl || !!item.story.videoEmbedHtml ? (
                       <View style={styles.videoIndicator}>
                         <View style={styles.playButton}>
@@ -1920,6 +2007,9 @@ export default function App() {
                     <View style={styles.overlay}>
                       <Text style={styles.kicker}>{item.story.source}</Text>
                       <Text style={styles.title} numberOfLines={3}>{item.story.title}</Text>
+                      {!!item.story.publishedAt && (
+                        <Text style={styles.dateText}>{formatRelativeDate(item.story.publishedAt)}</Text>
+                      )}
                       {!!item.story.summary && (
                         <Text style={styles.summary} numberOfLines={2}>
                           {item.story.summary}
@@ -1931,6 +2021,33 @@ export default function App() {
               );})}
             </View>
           ))}
+          </View>
+        )}
+        
+        {/* Bouton Charger plus pour lazy loading */}
+        {!isSyncing && visibleStories.length >= displayLimit && displayLimit < (stories.length > 0 ? stories.length : previewStories.length) && (
+          <View style={{ padding: 24, alignItems: 'center' }}>
+            <Pressable 
+              onPress={() => setDisplayLimit(prev => prev + 12)}
+              style={({ pressed }) => [
+                {
+                  borderWidth: 1,
+                  borderColor: '#3f3f3f',
+                  backgroundColor: pressed ? '#1a1a1a' : '#0a0a0a',
+                  paddingHorizontal: 24,
+                  paddingVertical: 12,
+                },
+              ]}
+            >
+              <Text style={{
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: '800',
+                letterSpacing: 1.3,
+              }}>
+                CHARGER PLUS
+              </Text>
+            </Pressable>
           </View>
         )}
       </ScrollView>
@@ -2051,6 +2168,40 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1.2,
+  },
+  searchBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f1f1f',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#0f0f0f',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  searchClearButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  searchClearText: {
+    color: '#999',
+    fontSize: 14,
+    fontWeight: '700',
   },
   composer: {
     borderBottomWidth: 1,
@@ -2595,5 +2746,28 @@ const styles = StyleSheet.create({
     marginTop: 15,
     marginBottom: 15,
     width: '80%',
+  },
+  dateText: {
+    color: '#b0b0b0',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    marginTop: 6,
+    opacity: 0.8,
+  },
+  newBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#ff3366',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 2,
+  },
+  newBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
   },
 });
