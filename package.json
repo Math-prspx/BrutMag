@@ -1,0 +1,63 @@
+{
+  "name": "test_ai",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "cheerio": "^1.2.0",
+    "expo": "~56.0.4",
+    "expo-linear-gradient": "^56.0.4",
+    "expo-status-bar": "~56.0.4",
+    "fast-xml-parser": "^5.8.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "concurrently": "^9.2.1",
+    "electron": "^32.2.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build:web": "expo export --platform web --output-dir dist",
+    "build:ftp": "npm run build:web",
+    "zip:ftp": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path dist.zip) { Remove-Item dist.zip -Force }; Compress-Archive -Path dist\\* -DestinationPath dist.zip\"",
+    "standalone:win": "npm run build:web && electron-builder --win dir",
+    "standalone:dev": "npm run build:web && electron electron/main.cjs"
+  },
+  "private": true,
+  "build": {
+    "appId": "com.testai.brutmag",
+    "productName": "BrutMag",
+    "asar": false,
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false,
+    "nodeGypRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "win": {
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false,
+      "target": [
+        "dir"
+      ]
+    }
+  }
+}
