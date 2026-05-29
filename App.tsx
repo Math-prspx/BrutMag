@@ -26,7 +26,7 @@ const MAX_ITEMS_PER_FEED = 8;
 const FEED_FETCH_TIMEOUT_MS = 10000;
 const FEED_SYNC_CONCURRENCY = 3;
 const RSS2JSON_ENDPOINT = 'https://api.rss2json.com/v1/api.json?rss_url=';
-const SYNC_API_BASE_URL = 'http://127.0.0.1:3333';
+const SYNC_API_BASE_URL = 'https://brutmag.onrender.com';
 const SYNC_STEPS = [
   'LECTURE DES FLUX',
   'DETECTION DES NOUVEAUTES',
