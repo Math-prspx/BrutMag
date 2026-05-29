@@ -17,121 +17,68 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-const FEEDS_STORAGE_KEY = 'brutmag:feeds';
-const STORIES_STORAGE_KEY = 'brutmag:stories';
-const ACCOUNT_TOKEN_KEY = 'brutmag:accountToken';
-const ACCOUNT_EMAIL_KEY = 'brutmag:accountEmail';
-const TONES = ['#161616', '#1e1e1e', '#111111', '#191919', '#101010'];
-const MAX_ITEMS_PER_FEED = 8;
-const FEED_FETCH_TIMEOUT_MS = 10000;
-const FEED_SYNC_CONCURRENCY = 3;
-const RSS2JSON_ENDPOINT = 'https://api.rss2json.com/v1/api.json?rss_url=';
-const SYNC_API_BASE_URL = 'https://nothuman.be/api/api'; // API PHP MySQL
-const NODE_API_BASE_URL = 'https://brutmag.onrender.com'; // Backend Node.js pour scraping
-const SYNC_STEPS = [
-  'LECTURE DES FLUX',
-  'DETECTION DES NOUVEAUTES',
-  'NETTOYAGE DES REPONSES',
-  'RECONSTRUCTION DE LA MOSAIQUE',
-];
 
-type Feed = {
-  id: string;
-  name: string;
-  sourceUrl: string;
-  url: string;
-  createdAt: number;
-};
-
-type FeedTransferPayload = {
-  version: 1;
-  exportedAt: string;
-  feeds: Feed[];
-};
-
-type AccountSession = {
-  token: string;
-  user: {
-    id: string;
-    email: string;
-    createdAt: number;
-    updatedAt: number;
-  };
-  feeds?: Feed[];
-};
-
-type Story = {
-  id: string;
-  title: string;
-  source: string;
-  tone: string;
-  feedId?: string;
-  imageUrl?: string;
-  imageUrls?: string[];
-  url?: string;
-  publishedAt?: string;
-  summary?: string;
-  body?: string;
-  videoUrl?: string;
-  videoType?: 'youtube' | 'vimeo' | 'embed' | 'native';
-  videoEmbedHtml?: string;
-};
-
-type MasonryItem = {
-  story: Story;
-  order: number;
-  height: number;
-};
-
-const seedStories: Story[] = [
-  {
-    id: '01',
-    title: 'CITY IN SILENCE',
-    source: 'ARCHIVE',
-    tone: '#161616',
-  },
-  {
-    id: '02',
-    title: 'ANGLES OF LIGHT',
-    source: 'OBSERVATORY',
-    tone: '#1e1e1e',
-  },
-  {
-    id: '03',
-    title: 'RAW GEOMETRY',
-    source: 'MONO ISSUE',
-    tone: '#111111',
-  },
-];
+// Import depuis les modules refactorisés
+import {
+  // Types
+  Feed,
+  Story,
+  FeedTransferPayload,
+  AccountSession,
+  MasonryItem,
+  Rss2JsonItem,
+  Rss2JsonFeedResponse,
+  // Constantes
+  FEEDS_STORAGE_KEY,
+  STORIES_STORAGE_KEY,
+  ACCOUNT_TOKEN_KEY,
+  ACCOUNT_EMAIL_KEY,
+  TONES,
+  MAX_ITEMS_PER_FEED,
+  FEED_FETCH_TIMEOUT_MS,
+  FEED_SYNC_CONCURRENCY,
+  RSS2JSON_ENDPOINT,
+  SYNC_API_BASE_URL,
+  NODE_API_BASE_URL,
+  SYNC_STEPS,
+  SEED_STORIES as seedStories,
+  // Utils date
+  isNewStory,
+  formatRelativeDate,
+  // Utils image
+  decodeHtmlEntities,
+  resolveImageCandidate,
+  extractImageUrlsFromHtml,
+  uniqueImageUrls,
+  getPrimaryImageUrl,
+  getStoryImageCandidates,
+  getStoryHeroCandidates,
+  getStoryImageKey,
+  getDisplayImageUrl,
+  getCardImageUrl,
+  getDetailHeroImageUrl,
+  getSecondaryImageUrls,
+  // Utils feed
+  buildFeedCandidates,
+  fetchFeedJson,
+  resolveFeedUrl,
+  // loadFeedStories, // Gardé dans App.tsx (logique vidéo spécifique)
+  normalizeFeed,
+  dedupeFeeds,
+  mergeFeeds,
+  withTimeout,
+  runWithConcurrency,
+  // Utils API
+  apiRequest as apiRequestUtil,
+  loadFeedsFromAccount as loadFeedsFromAccountUtil,
+  pushFeedsToAccount as pushFeedsToAccountUtil,
+} from './src';
 
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   textNodeName: '#text',
 });
-
-type Rss2JsonItem = {
-  title?: string;
-  pubDate?: string;
-  link?: string;
-  guid?: string;
-  thumbnail?: string;
-  description?: string;
-  content?: string;
-  enclosure?: { link?: string };
-};
-
-type Rss2JsonFeedResponse = {
-  status?: string;
-  feed?: {
-    title?: string;
-    url?: string;
-    link?: string;
-    description?: string;
-  };
-  items?: Rss2JsonItem[];
-  message?: string;
-};
 
 function toHostname(url: string) {
   try {
@@ -172,248 +119,12 @@ function stripHtml(input: string) {
     .trim();
 }
 
-function decodeHtmlEntities(input: string) {
-  return input
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>');
-}
+// ✅ Fonctions image maintenant importées depuis src/utils/image.ts
+// (decodeHtmlEntities, resolveImageCandidate, extractImageUrlsFromHtml, etc.)
 
-function resolveImageCandidate(candidate: string, baseUrl?: string) {
-  const cleaned = decodeHtmlEntities(String(candidate || '').trim());
-  if (!cleaned) {
-    return '';
-  }
-
-  if (/^https?:\/\//i.test(cleaned)) {
-    return cleaned;
-  }
-
-  if (cleaned.startsWith('//')) {
-    return `https:${cleaned}`;
-  }
-
-  if (baseUrl) {
-    try {
-      return new URL(cleaned, baseUrl).toString();
-    } catch {
-      return '';
-    }
-  }
-
-  return '';
-}
-
-function extractImageUrlsFromHtml(html: string, baseUrl?: string) {
-  if (!html) {
-    return [];
-  }
-
-  const matches = [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)];
-  return matches
-    .map((match) => resolveImageCandidate(match[1], baseUrl))
-    .filter(Boolean);
-}
-
-function uniqueImageUrls(urls: string[]) {
-  return urls.filter((url, index, array) => !!url && array.indexOf(url) === index);
-}
-
-function getPrimaryImageUrl(story: Story) {
-  const candidates = uniqueImageUrls([
-    story.imageUrl || '',
-    ...(story.imageUrls || []),
-  ]);
-  return candidates[0] || '';
-}
-
-function getStoryImageCandidates(story: Story) {
-  return uniqueImageUrls([story.imageUrl || '', ...(story.imageUrls || [])]);
-}
-
-function getStoryHeroCandidates(story: Story) {
-  // Utiliser le même ordre que les cartes pour avoir la même image
-  return uniqueImageUrls([story.imageUrl || '', ...(story.imageUrls || [])]);
-}
-
-function getStoryImageKey(storyId: string, imageUrl: string) {
-  return `${storyId}:${imageUrl}`;
-}
-
-function getDisplayImageUrl(story: Story, failedImages: Record<string, boolean>) {
-  const candidates = getStoryImageCandidates(story);
-  return (
-    candidates.find((url) => !failedImages[getStoryImageKey(story.id, url)]) ||
-    candidates[0] ||
-    ''
-  );
-}
-
-function getCardImageUrl(story: Story, attemptIndex: number) {
-  const candidates = getStoryImageCandidates(story);
-  const index = Math.min(attemptIndex, Math.max(candidates.length - 1, 0));
-  return candidates[index] || '';
-}
-
-function getDetailHeroImageUrl(story: Story, failedImages: Record<string, boolean>) {
-  const candidates = getStoryHeroCandidates(story);
-  return (
-    candidates.find((url) => !failedImages[getStoryImageKey(story.id, url)]) ||
-    candidates[0] ||
-    ''
-  );
-}
-
-function getSecondaryImageUrls(story: Story) {
-  const primary = getPrimaryImageUrl(story);
-  return uniqueImageUrls(story.imageUrls || []).filter((url) => url !== primary);
-}
-
-function buildFeedCandidates(inputUrl: string) {
-  try {
-    const parsed = new URL(inputUrl);
-    const basePath = parsed.pathname.replace(/\/$/, '');
-    const pathCandidates = basePath
-      ? [
-          `${basePath}/feed/`,
-          `${basePath}/feed`,
-          `${basePath}/rss/`,
-          `${basePath}/rss`,
-        ]
-      : [];
-
-    const roots = [
-      '/feed/',
-      '/feed',
-      '/rss/',
-      '/rss',
-      '/rss.xml',
-      '/feed.xml',
-      '/feeds.xml',
-      '/atom.xml',
-    ];
-
-    const candidates = new Set<string>();
-    candidates.add(parsed.toString());
-
-    for (const path of roots) {
-      candidates.add(new URL(path, parsed.origin).toString());
-    }
-
-    for (const path of pathCandidates) {
-      candidates.add(new URL(path, parsed.origin).toString());
-    }
-
-    return [...candidates];
-  } catch {
-    return [inputUrl];
-  }
-}
-
-async function fetchFeedJson(feedUrl: string): Promise<Rss2JsonFeedResponse> {
-  // Utiliser le proxy du serveur pour bénéficier du cache
-  try {
-    const proxyUrl = `${NODE_API_BASE_URL}/feed-proxy?url=${encodeURIComponent(feedUrl)}`;
-    const response = await fetch(proxyUrl);
-    if (!response.ok) {
-      throw new Error('Feed unreachable via proxy');
-    }
-    const data = (await response.json()) as Rss2JsonFeedResponse;
-    if (data.status !== 'ok' || !Array.isArray(data.items)) {
-      throw new Error(data.message || 'Feed unreachable');
-    }
-    return data;
-  } catch {
-    // Fallback: appeler directement rss2json si le proxy échoue
-    const response = await fetch(`${RSS2JSON_ENDPOINT}${encodeURIComponent(feedUrl)}`);
-    if (!response.ok) {
-      throw new Error('Feed unreachable');
-    }
-
-    const data = (await response.json()) as Rss2JsonFeedResponse;
-    if (data.status !== 'ok' || !Array.isArray(data.items)) {
-      throw new Error(data.message || 'Feed unreachable');
-    }
-
-    return data;
-  }
-}
-
-async function fetchPageSource(url: string): Promise<string> {
-  try {
-    const response = await fetch(url, { redirect: 'follow' });
-    if (response.ok) {
-      return await response.text();
-    }
-  } catch {
-    // Direct fetch can fail on web because of CORS.
-  }
-
-  const proxyUrl = `https://r.jina.ai/http://${url}`;
-  const proxyResponse = await fetch(proxyUrl);
-  if (proxyResponse.ok) {
-    return await proxyResponse.text();
-  }
-
-  throw new Error('Page unreachable');
-}
-
-
-async function resolveFeedUrl(inputUrl: string): Promise<string> {
-  for (const candidate of buildFeedCandidates(inputUrl)) {
-    try {
-      await fetchFeedJson(candidate);
-      return candidate;
-    } catch {
-      // Try the next guess.
-    }
-  }
-
-  throw new Error('Aucun flux detecte sur ce site');
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string) {
-  return Promise.race<T>([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-    }),
-  ]);
-}
-
-async function runWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  const results: PromiseSettledResult<R>[] = [];
-  let cursor = 0;
-
-  async function next(): Promise<void> {
-    const currentIndex = cursor;
-    cursor += 1;
-
-    if (currentIndex >= items.length) {
-      return;
-    }
-
-    try {
-      const value = await worker(items[currentIndex]);
-      results[currentIndex] = { status: 'fulfilled', value };
-    } catch (error) {
-      results[currentIndex] = { status: 'rejected', reason: error };
-    }
-
-    await next();
-  }
-
-  const workers = Array.from({ length: Math.min(limit, items.length) }, () => next());
-  await Promise.all(workers);
-  return results;
-}
+// ✅ Fonctions feed/API maintenant importées depuis src/utils/feed.ts et src/utils/api.ts
+// (buildFeedCandidates, fetchFeedJson, resolveFeedUrl, loadFeedStories, etc.)
+// (withTimeout, runWithConcurrency, normalizeFeed, dedupeFeeds, mergeFeeds)
 
 function extractVideoFromUrl(url: string): { url: string; type: 'youtube' | 'vimeo' | 'native' } | null {
   if (!url) return null;
@@ -634,65 +345,9 @@ function getMasonryColumnCount(width: number) {
   return 1;
 }
 
-function normalizeFeed(feed: Feed, fallbackId: string): Feed {
-  return {
-    id: feed.id || fallbackId,
-    name: feed.name.trim(),
-    sourceUrl: feed.sourceUrl?.trim() || feed.url.trim(),
-    url: feed.url.trim() || feed.sourceUrl.trim(),
-    createdAt: Number.isFinite(feed.createdAt) ? feed.createdAt : Date.now(),
-  };
-}
+// ✅ normalizeFeed, dedupeFeeds, mergeFeeds maintenant importés depuis src/utils/feed.ts
 
-function dedupeFeeds(feeds: Feed[]) {
-  const seen = new Set<string>();
-  const unique: Feed[] = [];
-
-  feeds.forEach((feed, index) => {
-    const normalized = normalizeFeed(feed, `${Date.now()}-${index}`);
-    const key = `${normalized.url.toLowerCase()}|${normalized.sourceUrl.toLowerCase()}`;
-
-    if (seen.has(key)) {
-      return;
-    }
-
-    seen.add(key);
-    unique.push(normalized);
-  });
-
-  return unique;
-}
-
-function mergeFeeds(primary: Feed[], secondary: Feed[]) {
-  return dedupeFeeds([...primary, ...secondary]);
-}
-
-function isNewStory(publishedAt?: string): boolean {
-  if (!publishedAt) return false;
-  const published = new Date(publishedAt).getTime();
-  const now = Date.now();
-  const dayInMs = 24 * 60 * 60 * 1000;
-  return now - published < dayInMs;
-}
-
-function formatRelativeDate(publishedAt?: string): string {
-  if (!publishedAt) return '';
-  
-  const published = new Date(publishedAt).getTime();
-  const now = Date.now();
-  const diffMs = now - published;
-  const diffMins = Math.floor(diffMs / (60 * 1000));
-  const diffHours = Math.floor(diffMs / (60 * 60 * 1000));
-  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  
-  if (diffMins < 1) return 'À l\'instant';
-  if (diffMins < 60) return `Il y a ${diffMins}min`;
-  if (diffHours < 24) return `Il y a ${diffHours}h`;
-  if (diffDays === 1) return 'Hier';
-  if (diffDays < 7) return `Il y a ${diffDays}j`;
-  if (diffDays < 30) return `Il y a ${Math.floor(diffDays / 7)}sem`;
-  return `Il y a ${Math.floor(diffDays / 30)}mois`;
-}
+// ✅ isNewStory et formatRelativeDate maintenant importés depuis src/utils/date.ts
 
 export default function App() {
   const { width, height } = useWindowDimensions();
