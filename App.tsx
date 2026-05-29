@@ -72,8 +72,10 @@ import {
   apiRequest as apiRequestUtil,
   loadFeedsFromAccount as loadFeedsFromAccountUtil,
   pushFeedsToAccount as pushFeedsToAccountUtil,
-  // Hooks
+  // Hooks  
   useArticleScraper,
+  // useAuth, // TODO: Nécessite refactoring de la logique auth/feeds dans App.tsx
+  // useFeeds, // TODO: Nécessite refactoring de la logique auth/feeds dans App.tsx
 } from './src';
 
 const parser = new XMLParser({
