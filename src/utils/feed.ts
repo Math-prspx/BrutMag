@@ -204,27 +204,32 @@ export function mergeFeeds(primary: Feed[], secondary: Feed[]): Feed[] {
  */
 export async function runWithConcurrency<T, R>(
   items: T[],
-  concurrency: number,
-  fn: (item: T, index: number) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = [];
-  let currentIndex = 0;
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = [];
+  let cursor = 0;
 
   async function next(): Promise<void> {
-    const index = currentIndex++;
-    if (index >= items.length) {
+    const currentIndex = cursor;
+    cursor += 1;
+
+    if (currentIndex >= items.length) {
       return;
     }
 
-    const item = items[index];
-    const result = await fn(item, index);
-    results[index] = result;
+    try {
+      const value = await worker(items[currentIndex]);
+      results[currentIndex] = { status: 'fulfilled', value };
+    } catch (error) {
+      results[currentIndex] = { status: 'rejected', reason: error };
+    }
 
     await next();
   }
 
-  await Promise.all(Array.from({ length: concurrency }, () => next()));
-
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => next());
+  await Promise.all(workers);
   return results;
 }
 
