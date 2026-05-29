@@ -43,3 +43,8 @@ yarn-error.*
 # build artifacts
 release/
 dist.zip
+php-api.zip
+data/
+
+# PHP config with credentials
+php-api/config/database.php

@@ -26,7 +26,8 @@ const MAX_ITEMS_PER_FEED = 8;
 const FEED_FETCH_TIMEOUT_MS = 10000;
 const FEED_SYNC_CONCURRENCY = 3;
 const RSS2JSON_ENDPOINT = 'https://api.rss2json.com/v1/api.json?rss_url=';
-const SYNC_API_BASE_URL = 'https://brutmag.onrender.com';
+const SYNC_API_BASE_URL = 'https://nothuman.be/api/api'; // API PHP MySQL
+const NODE_API_BASE_URL = 'https://brutmag.onrender.com'; // Backend Node.js pour scraping
 const SYNC_STEPS = [
   'LECTURE DES FLUX',
   'DETECTION DES NOUVEAUTES',
@@ -315,7 +316,7 @@ function buildFeedCandidates(inputUrl: string) {
 async function fetchFeedJson(feedUrl: string): Promise<Rss2JsonFeedResponse> {
   // Utiliser le proxy du serveur pour bénéficier du cache
   try {
-    const proxyUrl = `${SYNC_API_BASE_URL}/feed-proxy?url=${encodeURIComponent(feedUrl)}`;
+    const proxyUrl = `${NODE_API_BASE_URL}/feed-proxy?url=${encodeURIComponent(feedUrl)}`;
     const response = await fetch(proxyUrl);
     if (!response.ok) {
       throw new Error('Feed unreachable via proxy');
@@ -784,7 +785,7 @@ export default function App() {
       return nextFeeds;
     }
 
-    const payload = (await apiRequest('/feeds', {
+    const payload = (await apiRequest('/feeds.php', {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -796,7 +797,7 @@ export default function App() {
   }
 
   async function loadFeedsFromAccount(token: string) {
-    const payload = (await apiRequest('/feeds', {
+    const payload = (await apiRequest('/feeds.php', {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -855,7 +856,7 @@ export default function App() {
     setAccountMessage(mode === 'login' ? 'Connexion en cours...' : 'Création du compte en cours...');
 
     try {
-      const payload = (await apiRequest(mode === 'login' ? '/auth/login' : '/auth/register', {
+      const payload = (await apiRequest(mode === 'login' ? '/auth/login.php' : '/auth/register.php', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       })) as AccountSession;
@@ -970,7 +971,7 @@ export default function App() {
       const fetchFullContent = async () => {
         try {
           const response = await fetch(
-            `${SYNC_API_BASE_URL}/article-content?url=${encodeURIComponent(selectedStory.url!)}`
+            `${NODE_API_BASE_URL}/article-content?url=${encodeURIComponent(selectedStory.url!)}`
           );
           
           if (response.ok) {

@@ -55,12 +55,43 @@ try {
         exit();
     }
     
-    // Succès
+    // Récupérer les feeds de l'utilisateur
+    $feed_stmt = $db->prepare("
+        SELECT 
+            id,
+            feed_title as name,
+            feed_url as sourceUrl,
+            feed_url as url,
+            UNIX_TIMESTAMP(created_at) * 1000 as createdAt
+        FROM user_feeds 
+        WHERE user_id = :user_id 
+        ORDER BY created_at
+    ");
+    $feed_stmt->execute(['user_id' => $user['id']]);
+    $raw_feeds = $feed_stmt->fetchAll();
+    
+    // Convertir les entiers pour JSON
+    $feeds = array_map(function($feed) {
+        return [
+            'id' => (string)$feed['id'],
+            'name' => $feed['name'],
+            'sourceUrl' => $feed['sourceUrl'],
+            'url' => $feed['url'],
+            'createdAt' => (int)$feed['createdAt']
+        ];
+    }, $raw_feeds);
+    
+    // Succès - Format compatible avec App.tsx
     http_response_code(200);
     echo json_encode([
         'message' => 'Connexion réussie',
         'token' => $user['token'],
-        'email' => $user['email']
+        'email' => $user['email'],
+        'user' => [
+            'id' => $user['id'],
+            'email' => $user['email']
+        ],
+        'feeds' => $feeds
     ]);
     
 } catch (PDOException $e) {

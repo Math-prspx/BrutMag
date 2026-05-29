@@ -7,27 +7,151 @@
 #### Frontend (React Native / Expo)
 - **URL** : https://nothuman.be/projects/brutmag/
 - **Statut** : ✅ En production et fonctionnel
-- **Dernière mise à jour** : Aujourd'hui (nouvelles fonctionnalités)
+- **Build** : 646 KB (optimisé)
+- **Dernière mise à jour** : 29 Mai 2026
 
 #### Backend Node.js (Render.com)
 - **URL** : https://brutmag.onrender.com
-- **Statut** : ✅ En ligne (cache feeds + scraping)
+- **Statut** : ✅ En ligne
 - **Fonction** : Feed proxy avec cache 10min, scraping article content/images
+
+#### API PHP MySQL (OVH)
+- **URL** : https://nothuman.be/api/api/
+- **Statut** : ✅ En production
+- **Base** : nothumanbrutmag.mysql.db
+- **Fonction** : Authentification, gestion flux, favoris, suivi lecture
 
 ---
 
-## 🎉 Fonctionnalités Implémentées Aujourd'hui
+## 🎉 Fonctionnalités Implémentées
 
 ### 1. **Lazy Loading** ⚡
-- 12 articles chargés initialement au lieu de 48
+- 12 articles chargés initialement
 - Bouton "CHARGER PLUS" pour charger par tranches de 12
-- Amélioration significative des performances
+- Performance optimisée
 
 ### 2. **Dates Relatives** 📅
 - Format : "Il y a 6h", "Hier", "Il y a 3j"
 - Affichage sous chaque titre d'article
 
 ### 3. **Badge "NOUVEAU"** 🔴
+- Articles publiés il y a moins de 24h
+- Badge rouge "NOUVEAU" affiché
+
+### 4. **Synchronisation MySQL** 🔄
+- Authentification utilisateur (login/register)
+- Synchronisation des flux entre navigateurs
+- 6 flux design par défaut
+- API REST complète (feeds, favorites, read tracking)
+
+### 5. **Interface Améliorée** 🎨
+- Mode clair/sombre
+- Recherche en temps réel
+- Layout masonry avec images
+- Tri par date/mélange/flux
+
+---
+
+## 📁 Structure du Projet (Nettoyée)
+
+```
+test_AI/
+├── App.tsx              # Application React Native principale (2250+ lignes)
+├── index.ts             # Point d'entrée Expo
+├── app.json             # Config Expo (base path: /projects/brutmag)
+├── package.json         # Dépendances
+├── tsconfig.json        # Config TypeScript
+├── server.js            # Backend Node.js (Render.com)
+├── dist/                # Build statique FTP
+├── assets/              # Images et ressources
+├── electron/            # Source Electron (optionnel)
+├── php-api/             # API PHP MySQL
+│   ├── .htaccess        # Config Apache + CORS
+│   ├── config/
+│   │   └── database.php # Connexion MySQL
+│   ├── api/
+│   │   ├── auth/
+│   │   │   ├── login.php
+│   │   │   └── register.php
+│   │   ├── feeds.php
+│   │   ├── favorites.php
+│   │   └── read-articles.php
+│   └── install/
+│       ├── schema.sql
+│       └── schema-ovh.sql
+└── DEPLOY.md            # Instructions déploiement
+```
+
+---
+
+## 🗄️ Base de Données MySQL
+
+**Tables :**
+- `users` : Comptes utilisateurs (email, password_hash, salt, token)
+- `user_feeds` : Flux RSS de chaque utilisateur
+- `favorites` : Articles favoris
+- `read_articles` : Articles lus
+
+**Compte Test :**
+- Email : mathieu@nothuman.be
+- Password : Brutmag123
+- Token : 7699908787404d6c09e34aed1861b3d4f802675234ff1f44f22e8e3c9293a281
+
+**Flux par Défaut (6) :**
+- Wallpaper
+- Dezeen
+- Creative Review
+- Design Week
+- Web Designer Depot
+- Print Magazine
+
+---
+
+## 🚀 Déploiement
+
+### Frontend
+```bash
+npm run build:ftp    # Build statique
+# Upload dist/ vers /www/projects/brutmag/ via FTP
+```
+
+### API PHP
+```bash
+# Upload php-api/ vers /www/api/ via FTP
+# Configurer database.php avec credentials MySQL OVH
+```
+
+### Backend Node.js
+- Auto-deploy depuis GitHub vers Render.com
+- URL : https://brutmag.onrender.com
+
+---
+
+## ✅ Tests Validés
+
+- ✅ Login/Register fonctionnel
+- ✅ Synchronisation des 6 flux depuis MySQL
+- ✅ Chargement de 48 articles avec images
+- ✅ Badges "NOUVEAU" affichés
+- ✅ Dates relatives correctes
+- ✅ Mode clair/sombre
+- ✅ Recherche fonctionnelle
+- ✅ Lazy loading opérationnel
+
+---
+
+## 📋 TODO Prochaines Étapes
+
+### Priorité Haute
+- [ ] Implémenter UI Favoris (⭐ bouton sur articles)
+- [ ] Implémenter suivi de lecture (marquer comme lu)
+- [ ] Sauvegarder sur Git
+
+### Améliorations Futures
+- [ ] PWA avec service worker
+- [ ] Notifications push
+- [ ] Mode hors ligne
+- [ ] Export/import OPML
 - Badge rose/rouge sur articles < 24h
 - Position : coin supérieur droit des cartes
 

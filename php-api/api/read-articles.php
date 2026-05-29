@@ -12,8 +12,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Extraire le token
-$headers = getallheaders();
-$token = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+$token = null;
+if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    $token = $_SERVER['HTTP_AUTHORIZATION'];
+} elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+    $token = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+} elseif (function_exists('apache_request_headers')) {
+    $headers = apache_request_headers();
+    $token = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+}
 
 if ($token && strpos($token, 'Bearer ') === 0) {
     $token = substr($token, 7);

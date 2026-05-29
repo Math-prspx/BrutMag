@@ -95,11 +95,42 @@ try {
         ]);
     }
     
+    // Récupérer les feeds avec leurs IDs et dates depuis la BDD
+    $feed_list_stmt = $db->prepare("
+        SELECT 
+            id,
+            feed_title as name,
+            feed_url as sourceUrl,
+            feed_url as url,
+            UNIX_TIMESTAMP(created_at) * 1000 as createdAt
+        FROM user_feeds 
+        WHERE user_id = :user_id 
+        ORDER BY created_at
+    ");
+    $feed_list_stmt->execute(['user_id' => $user_id]);
+    $raw_feeds = $feed_list_stmt->fetchAll();
+    
+    // Convertir les entiers pour JSON
+    $feeds_response = array_map(function($feed) {
+        return [
+            'id' => (string)$feed['id'],
+            'name' => $feed['name'],
+            'sourceUrl' => $feed['sourceUrl'],
+            'url' => $feed['url'],
+            'createdAt' => (int)$feed['createdAt']
+        ];
+    }, $raw_feeds);
+    
     http_response_code(201);
     echo json_encode([
         'message' => 'Compte créé avec succès',
         'token' => $token,
-        'email' => $email
+        'email' => $email,
+        'user' => [
+            'id' => $user_id,
+            'email' => $email
+        ],
+        'feeds' => $feeds_response
     ]);
     
 } catch (PDOException $e) {

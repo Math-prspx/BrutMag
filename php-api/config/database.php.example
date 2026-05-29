@@ -1,10 +1,12 @@
 <?php
-// Configuration base de données MySQL OVH
+// Configuration base de données MySQL
+// Copier ce fichier vers database.php et remplir avec vos credentials
+
 class Database {
-    private $host = "nothumanbrutmag.mysql.db";
-    private $db_name = "nothumanbrutmag";
-    private $username = "nothumanbrutmag";
-    private $password = "Brutmag123";
+    private $host = "your_mysql_host.db";        // Ex: mysql5-123.perso ou localhost
+    private $db_name = "your_database_name";     // Ex: brutmag_db
+    private $username = "your_mysql_username";   // Ex: brutmag_user
+    private $password = "your_mysql_password";   // Mot de passe MySQL
     private $conn;
 
     public function getConnection() {
