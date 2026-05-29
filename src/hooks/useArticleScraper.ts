@@ -59,5 +59,10 @@ export function useArticleScraper() {
     articleError,
     scrapeArticle,
     resetScraper,
+    // Expose setters pour permettre un usage personnalisé
+    setArticleBody,
+    setScrapedImages,
+    setArticleLoading,
+    setArticleError,
   };
 }

@@ -72,6 +72,8 @@ import {
   apiRequest as apiRequestUtil,
   loadFeedsFromAccount as loadFeedsFromAccountUtil,
   pushFeedsToAccount as pushFeedsToAccountUtil,
+  // Hooks
+  useArticleScraper,
 } from './src';
 
 const parser = new XMLParser({
@@ -371,10 +373,19 @@ export default function App() {
   const [syncStep, setSyncStep] = useState(0);
   const [selectedStory, setSelectedStory] = useState<Story | null>(null);
   const [hoveredStoryId, setHoveredStoryId] = useState<string | null>(null);
-  const [articleBody, setArticleBody] = useState('');
-  const [scrapedImages, setScrapedImages] = useState<string[]>([]);
-  const [articleLoading, setArticleLoading] = useState(false);
-  const [articleError, setArticleError] = useState('');
+  
+  // Hook pour le scraping d'articles
+  const {
+    articleBody,
+    scrapedImages,
+    articleLoading,
+    articleError,
+    setArticleBody,
+    setScrapedImages,
+    setArticleLoading,
+    setArticleError,
+  } = useArticleScraper();
+  
   const [transferText, setTransferText] = useState('');
   const [transferMessage, setTransferMessage] = useState('');
   const [detailHeroAttempt, setDetailHeroAttempt] = useState(0);
